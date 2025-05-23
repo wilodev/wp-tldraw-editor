@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import { EditorControls } from './EditorControls'
 import { useEditorApi } from './hooks/useEditorApi'
 import { TldrawCanvas } from './TldrawCanvas'
+import { DrawShape, GeoShape, RectangleShape } from './types'
 
 export function Editor() {
 	// Estado para controlar si el editor está montado
@@ -33,28 +34,63 @@ export function Editor() {
 		if (editorRef.current && editorData && editorMounted) {
 			console.log('Datos cargados:', editorData)
 
-			// Cargar los datos en el editor
 			try {
-				// Limpiar el canvas actual
 				editorRef.current.selectAll()
 				const selectedIds = editorRef.current.getSelectedShapeIds()
 				editorRef.current.deleteShapes(selectedIds)
 
-				// Crear cada forma recibida del servidor
 				editorData.shapes.forEach((shape) => {
-					// Creación de formas según su tipo
-					if (shape.type === 'rectangle') {
-						editorRef.current?.createShape({
-							type: 'geo',
-							x: shape.x,
-							y: shape.y,
-							props: {
-								w: shape.width,
-								h: shape.height,
-								geo: 'rectangle',
-								fill: shape.fill,
-							},
-						})
+					try {
+						if (shape.type === 'rectangle') {
+							const rectShape = shape as RectangleShape
+							editorRef.current?.createShape({
+								type: 'geo',
+								x: rectShape.x,
+								y: rectShape.y,
+								props: {
+									w: rectShape.width,
+									h: rectShape.height,
+									geo: 'rectangle',
+									fill: 'solid',
+									color: rectShape.fill,
+								},
+							})
+						} else if (shape.type === 'draw') {
+							const drawShape = shape as DrawShape
+							editorRef.current?.createShape({
+								type: 'draw',
+								x: drawShape.x,
+								y: drawShape.y,
+								props: {
+									segments: drawShape.props.segments,
+									color: drawShape.props.color || 'black',
+									fill: drawShape.props.fill || 'none',
+									dash: drawShape.props.dash || 'draw',
+									size: drawShape.props.size || 'm',
+									isComplete: true,
+									isClosed: false,
+								},
+							})
+						} else if (shape.type === 'geo') {
+							const geoShape = shape as GeoShape
+							editorRef.current?.createShape({
+								type: 'geo',
+								x: geoShape.x,
+								y: geoShape.y,
+								props: {
+									w: geoShape.props.w,
+									h: geoShape.props.h,
+									geo: geoShape.props.geo,
+									color: geoShape.props.color || 'black',
+									fill: geoShape.props.fill || 'solid',
+								},
+							})
+						}
+					} catch (shapeError) {
+						console.error(
+							`Error al restaurar forma de tipo ${shape.type}:`,
+							shapeError
+						)
 					}
 				})
 

@@ -2,9 +2,60 @@
 import { publicProcedure, router } from '@/app/server/api/trpc'
 import { z } from 'zod'
 
-// Datos iniciales (en producción usaríamos una base de datos)
-// Esto es solo para demo, en un entorno real usarías una DB persistente
-let editorData = {
+// Definir interfaces para los diferentes tipos de formas
+interface BaseShape {
+	id: string
+	type: string
+	x: number
+	y: number
+	parentId?: string
+	index?: string
+	rotation?: number
+	isLocked?: boolean
+	opacity?: number
+	meta?: Record<string, unknown>
+}
+
+interface RectangleShape extends BaseShape {
+	type: 'rectangle'
+	width: number
+	height: number
+	fill: string
+}
+
+interface GeoShape extends BaseShape {
+	type: 'geo'
+	props: {
+		w: number
+		h: number
+		geo: string
+		color?: string
+		fill?: string
+		[key: string]: unknown
+	}
+}
+
+interface DrawShape extends BaseShape {
+	type: 'draw'
+	props: {
+		segments: unknown[]
+		color?: string
+		fill?: string
+		dash?: string
+		size?: string
+		[key: string]: unknown
+	}
+}
+
+// Tipo unión para cualquier forma
+type Shape =
+	| RectangleShape
+	| GeoShape
+	| DrawShape
+	| (BaseShape & Record<string, unknown>)
+
+// Datos iniciales
+let editorData: { shapes: Shape[] } = {
 	shapes: [
 		{
 			id: '1',
@@ -25,11 +76,14 @@ export const editorRouter = router({
 	}),
 
 	// Endpoint para actualizar los datos del editor
-	// Valida la entrada usando Zod
 	updateData: publicProcedure
-		.input(z.object({ shapes: z.array(z.any()) }))
+		.input(z.object({ shapes: z.array(z.unknown()) }))
 		.mutation(({ input }) => {
-			editorData = input
+			editorData = {
+				shapes: input.shapes.map((shape) => ({
+					...(shape as Shape),
+				})),
+			}
 			return { success: true }
 		}),
 
@@ -51,22 +105,73 @@ export const editorRouter = router({
 			// Obtener la forma existente
 			const shape = editorData.shapes[shapeIndex]
 
-			// Realizar un cambio visible en la forma
-			// Cambiar el color a rojo o a otro color si ya es rojo
-			const newFill = shape.fill === 'red' ? 'green' : 'red'
+			if (shape.type === 'draw') {
+				const drawShape = shape as DrawShape
+				// Para formas de tipo dibujo, modificamos el color en props
+				const currentColor = drawShape.props?.color || 'black'
+				const newColor = currentColor === 'red' ? 'blue' : 'red'
 
-			// Actualizar la forma
-			editorData.shapes[shapeIndex] = {
-				...shape,
-				fill: newFill,
-				...(shape.width && { width: shape.width + 20 }),
-				...(shape.height && { height: shape.height + 20 }),
-			}
+				// Actualizar solo la propiedad color manteniendo la estructura
+				editorData.shapes[shapeIndex] = {
+					...drawShape,
+					props: {
+						...drawShape.props,
+						color: newColor,
+					},
+				}
 
-			return {
-				success: true,
-				shape: editorData.shapes[shapeIndex],
-				message: `Forma modificada: color cambiado a ${newFill} y tamaño aumentado`,
+				return {
+					success: true,
+					shape: editorData.shapes[shapeIndex],
+					message: `Dibujo modificado: color cambiado a ${newColor}`,
+				}
+			} else if (shape.type === 'geo') {
+				const geoShape = shape as GeoShape
+				// Formato nuevo con props
+				const currentColor = geoShape.props.color || 'black'
+				const newColor = currentColor === 'red' ? 'blue' : 'red'
+
+				editorData.shapes[shapeIndex] = {
+					...geoShape,
+					props: {
+						...geoShape.props,
+						color: newColor,
+						w: geoShape.props.w
+							? geoShape.props.w + 20
+							: geoShape.props.w,
+						h: geoShape.props.h
+							? geoShape.props.h + 20
+							: geoShape.props.h,
+					},
+				}
+
+				return {
+					success: true,
+					shape: editorData.shapes[shapeIndex],
+					message: `Forma modificada: color cambiado y tamaño aumentado`,
+				}
+			} else if (shape.type === 'rectangle') {
+				const rectShape = shape as RectangleShape
+				// Formato antiguo (por compatibilidad)
+				const newFill = rectShape.fill === 'red' ? 'green' : 'red'
+
+				editorData.shapes[shapeIndex] = {
+					...rectShape,
+					fill: newFill,
+					width: rectShape.width + 20,
+					height: rectShape.height + 20,
+				}
+
+				return {
+					success: true,
+					shape: editorData.shapes[shapeIndex],
+					message: `Forma modificada: color cambiado y tamaño aumentado`,
+				}
+			} else {
+				return {
+					success: false,
+					message: `Tipo de forma no soportado: ${shape.type}`,
+				}
 			}
 		}),
 })
